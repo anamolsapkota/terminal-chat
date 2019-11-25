@@ -1,34 +1,51 @@
-#!/usr/bin/python
-import time, socket, sys
-print('Setup Server...')
-time.sleep(1)
-#Get the hostname, IP Address from socket and set Port
-soc = socket.socket()
-host_name = socket.gethostname()
-ip = socket.gethostbyname(host_name)
-port = 1234
-soc.bind((host_name, port))
-print(host_name, '({})'.format(ip))
-name = input('Enter name: ')
-soc.listen(1) #Try to locate using socket
-print('Waiting for incoming connections...')
-connection, addr = soc.accept()
-print("Received connection from ", addr[0], "(", addr[1], ")\n")
-print('Connection Established. Connected From: {}, ({})'.format(addr[0], addr[0]))
-#get a connection from client side
-client_name = connection.recv(1024)
-client_name = client_name.decode()
-print(client_name + ' has connected.')
-print('Press [bye] to leave the chat room')
-connection.send(name.encode())
-while True:
-   message = input('Me > ')
-   if message == '[bye]':
-      message = 'Good Night...'
-      connection.send(message.encode())
-      print("\n")
-      break
-   connection.send(message.encode())
-   message = connection.recv(1024)
-   message = message.decode()
-   print(client_name, '>', message)
+import socket,select
+import threading
+
+s=threading.Semaphore()
+
+class ThreadedServer():
+    def __init__(self):
+        self.host = "127.0.0.1"
+        self.port = 5555
+        self.connections=[]
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind((self.host, self.port))
+        self.connections.append(self.sock)
+
+    def listen(self):
+        self.sock.listen(5)
+        while True:
+            client, address = self.sock.accept()
+            self.connections.append(client)
+            threading.Thread(target = self.listenToClient,args = (client,address)).start()
+
+    def listenToClient(self, client, address):
+        size = 1024
+        global s
+        data=client.recv(1024)
+        self.broadcast(client,data+" just entered the chatroom \n")
+        client.send("Start Chatting.. \n")
+        while True:
+            self.read_sockets,write_sockets,error_sockets = select.select(self.connections,[],[])
+            for sock in self.read_sockets:
+                try:
+                    data = sock.recv(4096)
+                    if data:
+                        self.broadcast(sock, "\r" + data)
+                except:
+                    self.broadcast(sock, data+" is offline \n")
+                    print (data+" is offline \n")
+                    continue
+            
+    def broadcast(self,ssocket,msg):
+        for clients in self.connections:
+            if clients!=ssocket and clients!=self.sock:
+                try:
+                    clients.send(msg)
+                except:
+                    clients.close()
+                    self.connections.remove(clients)
+                
+if __name__ == "__main__":
+    ThreadedServer().listen()
