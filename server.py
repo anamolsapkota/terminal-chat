@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import time, socket, sys
 print('Setup Server...')
 time.sleep(1)
